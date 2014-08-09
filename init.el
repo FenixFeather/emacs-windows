@@ -213,6 +213,7 @@
  '(longlines-wrap-follows-window-size t)
  '(mediawiki-site-alist (quote (("Wikipedia" "http://en.wikipedia.org/w/" "FenixFeather" "" "Main Page"))))
  '(org-indent-mode-turns-off-org-adapt-indentation nil)
+ '(org-journal-dir "C:/Users/Thomas/Documents/journal/")
  '(org-startup-indented t)
  '(preview-gs-command "GSWIN64C.EXE")
  '(reftex-cite-prompt-optional-args (quote maybe))
