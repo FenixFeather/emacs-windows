@@ -210,6 +210,7 @@
  '(doc-view-continuous t)
  '(doc-view-dvipdf-program "dvipdfm")
  '(doc-view-ghostscript-program "gswin64c")
+ '(inferior-julia-program-name "julia")
  '(longlines-wrap-follows-window-size t)
  '(mediawiki-site-alist (quote (("Wikipedia" "http://en.wikipedia.org/w/" "FenixFeather" "" "Main Page"))))
  '(org-indent-mode-turns-off-org-adapt-indentation nil)
