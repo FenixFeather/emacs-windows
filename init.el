@@ -200,7 +200,8 @@
 (defun my-org-init ()
   (require 'typopunct)
   (typopunct-change-language 'english)
-  (typopunct-mode 1))
+  (typopunct-mode 1)
+  (visual-line-mode 1))
 (custom-set-variables
  ;; custom-set-variables was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.
@@ -216,6 +217,7 @@
  '(org-indent-mode-turns-off-org-adapt-indentation nil)
  '(org-journal-dir "C:/Users/Thomas/Documents/journal/")
  '(org-startup-indented t)
+ '(org-startup-truncated nil)
  '(preview-gs-command "GSWIN64C.EXE")
  '(reftex-cite-prompt-optional-args (quote maybe))
  '(show-paren-mode t))
