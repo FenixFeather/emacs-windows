@@ -23,9 +23,8 @@
 ;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 ;; GNU General Public License for more details.
 ;;
-;; You should have received a copy of the GNU General Public License
-;; along with GNU Emacs; see the file COPYING.  If not, write to
-;; the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+;; A copy of the GNU General Public License is available at
+;; http://www.r-project.org/Licenses/
 ;;
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -116,7 +115,7 @@
     (list julia-char-regex 2 'font-lock-string-face)
     (list julia-forloop-in-regex 1 'font-lock-keyword-face)
     ;; (cons ess-subset-regexp 'font-lock-constant-face)
-    (cons "\\(\\sw+\\) ?(" '(1 font-lock-function-name-face keep))
+    (cons "\\(\\sw+!?\\) ?(" '(1 font-lock-function-name-face keep))
     ;(list julia-string-regex 0 'font-lock-string-face)
 ))
 
@@ -132,13 +131,14 @@
 
 (defun julia-at-keyword (kw-list)
   "Return the word at point if it matches any keyword in KW-LIST.
-KW-LIST is a list of strings.  The word at point is not considered
-a keyword if used as a field name, X.word, or quoted, :word."
+KW-LIST is a list of strings.  The word at point is not
+considered a keyword if used as a field name, X.word, or
+quoted, :word, or it is part of Julia's comprehension syntax."
   (and (or (= (point) 1)
 	   (and (not (equal (char-before (point)) ?.))
 		(not (equal (char-before (point)) ?:))))
        (not (ess-inside-string-or-comment-p (point)))
-       (not (ess-inside-brackets-p (point)))
+       (not (ess-inside-brackets-p (point) t))
        (member (current-word) kw-list)))
 
 (defun julia-last-open-block-pos (min)
@@ -193,8 +193,7 @@ Do not move back beyond MIN."
                ;; block
                (or (julia-last-open-block-pos (point-min))
                    (point-min)))
-             (progn (beginning-of-line)
-                    (point))))
+             (point-at-bol)))
          (pos (cadr p)))
     (if (or (= 0 (car p)) (null pos))
         nil
@@ -232,7 +231,7 @@ Do not move back beyond MIN."
   '((paragraph-start		  . (concat "\\s-*$\\|" page-delimiter))
     (paragraph-separate		  . (concat "\\s-*$\\|" page-delimiter))
     (paragraph-ignore-fill-prefix . t)
-    (require-final-newline	  . t)
+    (require-final-newline	  . 'ess-require-final-newline)
     (comment-start		  . "# ")
     (comment-add                  . 1)
     (comment-start-skip		  . "#+\\s-*")
@@ -325,31 +324,33 @@ objects from that MODULE."
                  (get-process ess-local-process-name)))
   (when (process-live-p proc)
     (let ((objects (process-get proc 'objects)))
-     (if (process-get proc 'busy)
-         (if obj
-             (assoc obj objects)
-           (process-get proc 'objects))
-       (if obj
-           (or (cdr (assoc obj objects))
-               ;; don't cache composite objects and datatypes
-               (julia--get-components proc obj))
-         ;; this segment is entered when user completon at top level is
-         ;; requested, either Tab or AC. Hence Main is always updated.
-         (let ((modules (ess-get-words-from-vector
-                         "ESS.main_modules()\n" nil nil proc))
-               (loc (process-get proc 'last-objects-cache))
-               (lev (process-get proc 'last-eval)))
-           (prog1
-               (mapcan (lambda (mod)
-                         ;; we are caching all modules, and reinit Main every
-                         ;; time user enters commands
-                         (copy-sequence
-                          (or (and (or (not (equal mod "Main"))
-                                       (ignore-errors (time-less-p lev loc)))
-                                   (cdr (assoc mod objects)))
-                              (julia--get-components proc mod t))))
-                       modules)
-             (process-put proc 'last-objects-cache (current-time)))))))))
+      (if (process-get proc 'busy)
+          (if obj
+              (assoc obj objects)
+            (process-get proc 'objects))
+        (if obj
+            (or (cdr (assoc obj objects))
+                ;; don't cache composite objects and datatypes
+                (julia--get-components proc obj))
+          ;; this segment is entered when user completon at top level is
+          ;; requested, either Tab or AC. Hence Main is always updated.
+          (let ((modules (ess-get-words-from-vector
+                          "ESS.main_modules()\n" nil nil proc))
+                (loc (process-get proc 'last-objects-cache))
+                (lev (process-get proc 'last-eval)))
+            (prog1
+                (apply #'nconc
+                       (mapcar
+                        (lambda (mod)
+                          ;; we are caching all modules, and reinit Main every
+                          ;; time user enters commands
+                          (copy-sequence
+                           (or (and (or (not (equal mod "Main"))
+                                        (ignore-errors (time-less-p lev loc)))
+                                    (cdr (assoc mod objects)))
+                               (julia--get-components proc mod t))))
+                        modules))
+              (process-put proc 'last-objects-cache (current-time)))))))))
 
 (defun julia--get-components (proc obj &optional cache?)
   (with-current-buffer (ess-command (format "ESS.components(%s)\n" obj)
@@ -389,14 +390,15 @@ objects from that MODULE."
 
 
 ;;; ERRORS
-(defvar julia-error-regexp-alist '(julia-in julia-at)
+(defvar julia-error-regexp-alist '(julia-in julia-at julia-while-load)
   "List of symbols which are looked up in `compilation-error-regexp-alist-alist'.")
 
 (add-to-list 'compilation-error-regexp-alist-alist
              '(julia-in  "^\\s-*in [^ \t\n]* \\(at \\(.*\\):\\([0-9]+\\)\\)" 2 3 nil 2 1))
 (add-to-list 'compilation-error-regexp-alist-alist
              '(julia-at "^\\S-+\\s-+\\(at \\(.*\\):\\([0-9]+\\)\\)"  2 3 nil 2 1))
-
+(add-to-list 'compilation-error-regexp-alist-alist
+             '(julia-while-load "^\\s-*\\(while loading\\s-\\(.*\\), in .* on line +\\([0-9]+\\)\\)"  2 3 nil 2 1))
 
 
 ;;; ELDOC
@@ -538,7 +540,7 @@ to julia, put them in the variable `inferior-julia-args'."
   (interactive "P")
   ;; get settings, notably inferior-julia-program-name :
   (if (null inferior-julia-program-name)
-      (error "'inferior-julia-program-name' does not point to 'julia-basic' executable")
+      (error "'inferior-julia-program-name' does not point to 'julia' or 'julia-basic' executable")
     (setq ess-customize-alist julia-customize-alist)
     (ess-write-to-dribble-buffer   ;; for debugging only
      (format
@@ -566,6 +568,7 @@ to julia, put them in the variable `inferior-julia-args'."
       (while (re-search-forward "`" nil t)
         (replace-match "'"))
       (goto-char (point-max))
+      ;; --> julia helpers from ../etc/ess-julia.jl :
       (ess--inject-code-from-file (format "%sess-julia.jl" ess-etc-directory))
       (with-ess-process-buffer nil
         (run-mode-hooks 'julia-post-run-hook))

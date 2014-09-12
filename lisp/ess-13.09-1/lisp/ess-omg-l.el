@@ -20,9 +20,8 @@
 ;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 ;; GNU General Public License for more details.
 
-;; You should have received a copy of the GNU General Public License
-;; along with GNU Emacs; see the file COPYING.  If not, write to
-;; the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+;; A copy of the GNU General Public License is available at
+;; http://www.r-project.org/Licenses/
 
 ;;; Commentary:
 
@@ -255,7 +254,7 @@ Returns nil if line starts inside a string, t if in a comment."
   '((paragraph-start              . (concat "^$\\|" page-delimiter))
     (paragraph-separate           . (concat "^$\\|" page-delimiter))
     (paragraph-ignore-fill-prefix . t)
-    (require-final-newline        . t)
+    (require-final-newline        . 'ess-require-final-newline)
     (comment-start                . "//")
     (comment-start-skip           . "//+ *")
     (comment-column               . 40)

@@ -24,9 +24,8 @@
 ;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 ;; GNU General Public License for more details.
 
-;; You should have received a copy of the GNU General Public License
-;; along with GNU Emacs; see the file COPYING.  If not, write to
-;; the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+;; A copy of the GNU General Public License is available at
+;; http://www.r-project.org/Licenses/
 
 ;;; Commentary:
 
@@ -70,6 +69,7 @@
 (autoload 'tramp-tramp-file-p           "tramp" "(autoload).")
 (autoload 'tramp-file-name-localname    "tramp" "(autoload).")
 (autoload 'tramp-dissect-file-name      "tramp" "(autoload).")
+(autoload 'with-parsed-tramp-file-name  "tramp" "(autolaod).")
 
 ;; not really needed as tracebug and developer are loaded in r-d.el
 (autoload 'ess-tracebug-send-region       "ess-tracebug"      "(autoload).")
@@ -370,6 +370,7 @@ Otherwise stay at current position and return nil "
     (when new-point
       (goto-char new-point))))
 
+(defvar compilation--parsed)
 (defun inferior-ess-fontify-region (beg end &optional verbose)
   "Fontify output by output within the beg-end region to avoid
 fontification spilling over prompts."
@@ -380,18 +381,25 @@ fontification spilling over prompts."
          (pos (or (inferior-ess-goto-last-prompt-if-close)
                   beg))
          (pos2))
+    ;; Font lock seems to skip regions for unlear reason when
+    ;; font-lock-dont-widen is t. This in turn screws compilation marker and
+    ;; makes compilation--parse-region think that it parsed stuff that it
+    ;; didn't. So reset it each time.
+    (setq compilation--parsed -1)
     (with-silent-modifications
       ;; (dbg pos end)
-      (font-lock-unfontify-region pos end)
+      ;; (font-lock-unfontify-region pos end)
       (while (< pos end)
         (goto-char pos)
         (comint-next-prompt 1)
         (setq pos2 (min (point) end))
-        (save-restriction
-          (narrow-to-region pos pos2)
-          ;; (redisplay)
-          ;; (sit-for 1)
-          (font-lock-default-fontify-region pos pos2 verbose))
+        (if nil
+            (font-lock-default-fontify-region pos pos2 verbose)
+          ;; Some error locations are not fontified with with narrowing. Especiall those from gcc.
+          ;; What on earth is goin on?
+          (save-restriction
+            (narrow-to-region pos pos2)
+            (font-lock-default-fontify-region pos pos2 verbose)))
         (setq pos pos2)))))
 
 (defun ess-gen-proc-buffer-name:simple (proc-name)
@@ -434,18 +442,27 @@ Return the 'busy state."
   (process-put proc 'busy t)
   (process-put proc 'sec-prompt nil))
 
-(defun inferior-ess-run-callback (proc)
+(defun inferior-ess-run-callback (proc string)
+  ;; callback is stored in 'callbacks proc property. It can be either a function
+  ;; to be called with two artuments PROC and STRING or a cons cell of the form
+  ;; (func . suppress) where, if suppress is non-nil next process output will be
+  ;; suppressed.
   (when (process-get proc 'busy-end?)
-    (let ((cb (car (process-get proc 'callbacks))))
+    (let* ((cb (car (process-get proc 'callbacks)))
+           (listp (not (functionp cb)))
+           (suppress (and listp (consp cb) (cdr cb)))
+           (cb (if (and listp (consp cb))
+                   (car cb)
+                 cb)))
       (when cb
-        (if ess-verbose
-            (ess-write-to-dribble-buffer "executing callback ...\n")
+        (when ess-verbose
+            (ess-write-to-dribble-buffer "executing callback ...\n"))
+        (when suppress
           (process-put proc 'suppress-next-output? t))
         (process-put proc 'callbacks nil)
         (condition-case err
-            (funcall cb proc)
-          (error (message "%s" (error-message-string err))))
-        ))))
+            (funcall cb proc string)
+          (error (message "%s" (error-message-string err))))))))
 
 (defun ess--if-verbose-write-process-state (proc string &optional filter)
   (ess-if-verbose-write
@@ -475,7 +492,7 @@ the rest to `comint-output-filter'.
 Taken from octave-mod.el."
   (inferior-ess-set-status proc string)
   (ess--if-verbose-write-process-state proc string)
-  (inferior-ess-run-callback proc) ;; protected
+  (inferior-ess-run-callback proc string)
   (if (process-get proc 'suppress-next-output?)
       ;; works only for surpressing short output, for time being is enough (for callbacks)
       (process-put proc 'suppress-next-output? nil)
@@ -589,7 +606,8 @@ This marks the process with a message, at a particular time point."
 ;;*;; General process handling code
 (defmacro with-ess-process-buffer (no-error &rest body)
   "Execute BODY with current-buffer set to the process buffer of ess-current-process-name.
-If NO-ERROR is t don't trigger an error when there is not current process.
+If NO-ERROR is t don't trigger error when there is not current
+process.
 
 Symbol *proc* is bound to the current process during the evaluation of BODY."
   (declare (indent 1))
@@ -1136,7 +1154,7 @@ FORCE-REDISPLAY to avoid excesive redisplay."
   (setq proc (or proc (get-process ess-local-process-name)))
   (unless (eq (process-status proc) 'run)
     (ess-error "ESS process has died unexpectedly."))
-  (setq wait (or wait 0.001)) ;;xemacs is stuck if it's 0 here
+  (setq wait (or wait 0.002)) ;;xemacs is stuck if it's 0 here
   (let ((start-time (float-time)))
     (save-excursion
       (while (or (accept-process-output proc wait)
@@ -1164,7 +1182,7 @@ FORCE-REDISPLAY to avoid excesive redisplay."
 (defun inferior-ess-ordinary-filter (proc string)
   (inferior-ess-set-status proc string t)
   (ess--if-verbose-write-process-state proc string "ordinary-filter")
-  (inferior-ess-run-callback proc)
+  (inferior-ess-run-callback proc string)
   (with-current-buffer (process-buffer proc)
     ;; (princ (format "%s:" string))
     (insert string)))
@@ -1251,7 +1269,6 @@ STRING). In all other cases the behavior is as described in
 
 (defvar ess--inhibit-presend-hooks nil
   "If non-nil don't run presend hooks.")
-
 
 (defun ess--run-presend-hooks (process string)
   ;; run ess-presend-filter-functions and comint-input-filter-functions
@@ -1378,15 +1395,15 @@ explicit interrupt-callback.
 ;;                    (lambda (proc2) (message "name: %s" (process-name proc2))))
 
 
-(defun ess-async-command (com &optional buf proc callback interrupt-callback)
+(defun ess-async-command (com &optional buf proc callback interrupt-callback )
   "Asynchronous version of ess-command.
 COM, BUF, WAIT and PROC are as in `ess-command'.
 
-CALLBACK is a function of one argument (PROC) to run after the
-successful execution. When INTERRUPT-CALLBACK is non-nil, user
-evaluation can interrupt the job. INTERRUPT-CALLBACK should be
-either t or a function of one argument (PROC) to be called on
-interruption.
+CALLBACK is a function of two arguments (PROC STRING) to run
+after the successful execution. When INTERRUPT-CALLBACK is
+non-nil, user evaluation can interrupt the
+job. INTERRUPT-CALLBACK should be either t or a function of one
+argument (PROC) to be called on interruption.
 
 NOTE: Currently this function should be used only for background
 jobs like caching. ESS tries to suppress any output from the
@@ -1402,11 +1419,11 @@ up in user's main buffer.
           (error "Process %s is busy or already running an async command." ess-local-process-name)
         (when (eq interrupt-callback t)
           (setq interrupt-callback (lambda (proc))))
-        (process-put proc 'callbacks (list callback interrupt-callback))
+        (process-put proc 'callbacks (list (cons callback 'suppress-output)
+                                           interrupt-callback))
         (process-put proc 'interruptable? (and interrupt-callback t))
         (process-put proc 'running-async? t)
-        (ess-command com buf nil 'no-prompt-check .02 proc)
-        ))))
+        (ess-command com buf nil 'no-prompt-check .01 proc)))))
 
 
 (defun ess-command (com &optional buf sleep no-prompt-check wait proc force-redisplay)
@@ -1497,12 +1514,12 @@ local({
           (set-marker (process-mark sprocess) oldpm))))
     buf))
 
-(defun ess-boolean-command (com &optional buf)
+(defun ess-boolean-command (com &optional buf wait)
   "Like `ess-command' but expects COM to print TRUE or FALSE.
 If TRUE (or true) is found return non-nil otherwise nil.
 
 Example: (ess-boolean-command \"2>1\n\")"
-  (with-current-buffer (ess-command com buf)
+  (with-current-buffer (ess-command com buf nil nil wait)
     (goto-char (point-min))
     (let ((case-fold-search t))
       (re-search-forward "true" nil t))))
@@ -2179,6 +2196,7 @@ for `ess-eval-region'."
      ["Jump to Error"           ess-parse-errors        t]
      ["Load source file"  	ess-load-file           t]
      ["Resynch S completions"	ess-resynch		t]
+     ["Recreate R versions known to ESS" (ess-r-versions-create) t]
      )
     "------"
     ("start-dev" :visible nil); <-- ??
@@ -2648,7 +2666,7 @@ This is a good thing to put in `ess-post-run-hook' --- for the S dialects."
   (interactive)
   (if (string= ess-language "S")
       (ess-eval-linewise (format "options(width=%d, length=99999)"
-                                 (1- (window-width)))
+                                 (- (window-width) 2))
                          nil nil nil 'wait-prompt)))
 
 (defun ess-execute (command &optional invert buff message)
@@ -3227,14 +3245,13 @@ list."
       (if ess-smart-operators
           (progn
             (delete-horizontal-space)
-            (insert ", "))
+            (insert ", ")
+            (unless (eq major-mode 'inferior-ess-mode)
+             (ess-indent-line)))
         (insert ","))
       )))
 
-
-
  ; directories
-
 (defun ess-set-working-directory (path &optional no-error)
   "Set the current working directory to PATH for both ESS
 subprocess and Emacs buffer `default-directory'."
