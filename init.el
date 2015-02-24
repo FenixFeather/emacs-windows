@@ -113,6 +113,9 @@
        > _ \n
        "}" > \n)))
 
+(setq c-default-style "k&r"
+          c-basic-offset 4)
+
 (defun my-c++-mode-hook ()
   (c-set-style "k&r")        ; use my-style defined above
   (auto-fill-mode)         
