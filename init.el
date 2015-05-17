@@ -82,11 +82,12 @@
 
 ;;Color Scheme
 ;(load-library "color-theme")
-(require 'color-theme)
-(eval-after-load "color-theme"
-  '(progn
-     (color-theme-initialize)
-     (color-theme-subtle-hacker)))
+;; (require 'color-theme)
+;; (eval-after-load "color-theme"
+;;   '(progn
+;;      (color-theme-initialize)
+;;      (color-theme-subtle-hacker)))
+(load-theme 'zenburn t)
 
 ;;Options
 (electric-pair-mode 1)
