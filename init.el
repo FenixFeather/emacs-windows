@@ -1,6 +1,8 @@
 ;;.emacs
 ;;Thomas Liu
 
+(if (eq system-type 'windows-nt) (server-start))
+
 (package-initialize)
 
 (add-to-list 'load-path "~/.emacs.d/lisp/")
