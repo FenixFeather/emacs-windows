@@ -14,6 +14,11 @@
 (setq reftex-plug-into-AUCTeX t)
 (setq-default ispell-program-name "aspell")
 
+(defun load-ssh ()
+  (interactive)
+  (load-file "~/.ssh/agent.env.el")
+  )
+
 ;;;Windows backup
 (setq version-control t ;; Use version numbers for backups.
       kept-new-versions 10 ;; Number of newest versions to keep.
@@ -71,7 +76,7 @@
 (ac-set-trigger-key "<tab>")
 
 ;;;;More autocomplete
-(require 'auto-complete-auctex)
+;; (require 'auto-complete-auctex)
 (add-to-list 'ac-sources 'ac-source-c-headers)
 
 ;;;Markdown mode
@@ -96,6 +101,11 @@
 (show-paren-mode 1)
 (require 'ido)
 (ido-mode t)
+
+(global-set-key (kbd "M-x") 'smex)
+(global-set-key (kbd "M-X") 'smex-major-mode-commands)
+;; This is your old M-x.
+(global-set-key (kbd "C-c C-c M-x") 'execute-extended-command)
 
 ;;Templates
 (require 'template)
@@ -167,10 +177,10 @@
   (local-set-key (kbd "C-c C-k" ) 'uncomment-region))
 
 ;;LaTeX Stuff
-(setq TeX-auto-save t)
-(setq TeX-parse-self t)
-(setq TeX-save-query nil)
-(setq TeX-PDF-mode t)
+;; (setq TeX-auto-save t)
+;; (setq TeX-parse-self t)
+;; (setq TeX-save-query nil)
+;; (setq TeX-PDF-mode t)
 (add-hook 'doc-view-mode-hook 'auto-revert-mode)
 
 ;;Useful functions
